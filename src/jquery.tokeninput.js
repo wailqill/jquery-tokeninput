@@ -19,8 +19,9 @@ var DEFAULT_SETTINGS = {
     propertyToSearch: "name",
     jsonContainer: null,
     contentType: "json",
+    allowCreation: false,
 
-	// Prepopulation settings
+    // Prepopulation settings
     prePopulate: null,
     processPrePopulate: false,
 
@@ -29,6 +30,7 @@ var DEFAULT_SETTINGS = {
     noResultsText: "No results",
     searchingText: "Searching...",
     deleteText: "&times;",
+    createTokenText: "(Create new token)",
     animateDropdown: true,
     theme: null,
     zindex: 999,
@@ -43,6 +45,7 @@ var DEFAULT_SETTINGS = {
 
     // Callbacks
     onResult: null,
+    onCreate: null,
     onAdd: null,
     onDelete: null,
     onReady: null,
@@ -534,7 +537,7 @@ $.TokenList = function (input, url_or_data, settings) {
             token_list.children().each(function () {
                 var existing_token = $(this);
                 var existing_data = $.data(existing_token.get(0), "tokeninput");
-                if(existing_data && existing_data.id === item.id) {
+                if(existing_data && (existing_data.id === item.id || item.wasCreated && existing_data.name === item.name)) {
                     found_existing_token = existing_token;
                     return false;
                 }
@@ -546,6 +549,11 @@ $.TokenList = function (input, url_or_data, settings) {
                 focus_with_timeout(input_box);
                 return;
             }
+        }
+
+        // For newly created tokens, restore the original name without the text saying it is a new token
+        if(settings.allowCreation && item.wasCreated) {
+            (settings.tokenValue == "id") ? item.name = item.id : item.name = item[settings.tokenValue]; // restore the name without the token creation text
         }
 
         // Insert the new tokens
@@ -699,7 +707,7 @@ $.TokenList = function (input, url_or_data, settings) {
 
     // Highlight the query part of the search term
     function highlight_term(value, term) {
-        return value.replace(new RegExp("(?![^&;]+;)(?!<[^<>]*)(" + term + ")(?![^<>]*>)(?![^&;]+;)", "gi"), "<b>$1</b>");
+        return value.replace(new RegExp("(?![^&;]+;)(?!<[^<>]*)(" + term + ")(?![^<>]*>)(?![^&;]+;)", "gi"), "<strong>$1</strong>");
     }
 
     function find_value_and_highlight_term(template, value, term) {
@@ -837,10 +845,14 @@ $.TokenList = function (input, url_or_data, settings) {
                   if($.isFunction(settings.onResult)) {
                       results = settings.onResult.call(hidden_input, results);
                   }
-                  cache.add(cache_key, settings.jsonContainer ? results[settings.jsonContainer] : results);
+                  if(settings.allowCreation) {
+                      handleCreation(results);
+                  } else {
+                      cache.add(cache_key, settings.jsonContainer ? results[settings.jsonContainer] : results);
+                  }
 
                   // only populate the dropdown if the results are associated with the active search query
-                  if(input_box.val() === query) {
+                  if(input_box.val().toLowerCase() === query.toLowerCase()) {
                       populate_dropdown(query, settings.jsonContainer ? results[settings.jsonContainer] : results);
                   }
                 };
@@ -856,9 +868,28 @@ $.TokenList = function (input, url_or_data, settings) {
                 if($.isFunction(settings.onResult)) {
                     results = settings.onResult.call(hidden_input, results);
                 }
-                cache.add(cache_key, results);
+                if(settings.allowCreation) {
+                    handleCreation(results);
+                } else {
+                    cache.add(cache_key, results);
+                }
                 populate_dropdown(query, results);
             }
+        }
+    }
+
+    function handleCreation(results) {
+        var displayedItem = {};
+        displayedItem['name'] = input_box.val() + ' ' + settings.createTokenText;
+        displayedItem[settings.tokenValue] = input_box.val();
+        displayedItem['wasCreated'] = true;
+        results.push(displayedItem);
+
+        if($.isFunction(settings.onCreate)) {
+            var item = {};
+            item['name'] = input_box.val();
+            item[settings.tokenValue] = input_box.val();
+            settings.onCreate.call(hidden_input, item);
         }
     }
 
